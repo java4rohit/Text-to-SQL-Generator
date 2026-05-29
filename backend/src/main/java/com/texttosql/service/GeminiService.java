@@ -65,13 +65,13 @@ public class GeminiService {
             // Set headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-goog-api-key", apiKey);
 
             // Make API call to Gemini
-            String url = apiUrl + "?key=" + apiKey;
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
             
             ResponseEntity<String> response = restTemplate.exchange(
-                url,
+                apiUrl,
                 HttpMethod.POST,
                 entity,
                 String.class

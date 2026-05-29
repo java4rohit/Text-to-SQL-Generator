@@ -166,7 +166,7 @@ server.port=8080
 # MySQL Database
 spring.datasource.url=jdbc:mysql://localhost:3306/text_to_sql
 spring.datasource.username=root
-spring.datasource.password=Java4rohit1#
+spring.datasource.password=root#
 
 # Gemini AI
 gemini.api.key=YOUR_API_KEY_HERE
