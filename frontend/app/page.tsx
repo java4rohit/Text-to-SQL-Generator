@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { VoiceInputButton } from '../components/VoiceInputButton';
 
 interface QueryResult {
   sqlQuery: string;
@@ -30,6 +32,18 @@ export default function Home() {
   const [sqlOutputHeight, setSqlOutputHeight] = useState(40); // percentage
 
   const API_BASE_URL = 'http://localhost:8080/api';
+
+  // Speech recognition hook
+  const { isListening, toggleVoiceInput } = useSpeechRecognition(
+    (transcript) => {
+      setInput((prev) => prev + transcript);
+    },
+    (error) => {
+      if (error) {
+        setError(error);
+      }
+    }
+  );
 
   // Fetch database schema on mount
   useEffect(() => {
@@ -340,13 +354,20 @@ export default function Home() {
                 <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Natural Language Input</h2>
               </div>
               <form onSubmit={handleSubmit} className="p-5 flex-1 flex flex-col">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Find total revenue and orders for 'Processing' status in 2023, by month."
-                  className="w-full flex-1 bg-orange-50/50 border border-orange-200 rounded-lg px-4 py-3 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none text-sm leading-relaxed"
-                  disabled={loading}
-                />
+                <div className="relative flex-1">
+                  <textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Find total revenue and orders for 'Processing' status in 2023, by month."
+                    className="w-full h-full bg-orange-50/50 border border-orange-200 rounded-lg px-4 py-3 pr-14 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none text-sm leading-relaxed"
+                    disabled={loading}
+                  />
+                  <VoiceInputButton
+                    isListening={isListening}
+                    disabled={loading}
+                    onClick={toggleVoiceInput}
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={loading || !input.trim()}
