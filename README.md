@@ -4,10 +4,270 @@ A full-stack application that converts natural language questions into SQL queri
 
 ## 🏗️ Architecture
 
-- **Backend**: Java Spring Boot REST API
+### System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         USER INTERFACE                          │
+│                     (Next.js 14 + React)                        │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
+│  │ Chat Input   │  │ Schema View  │  │ Results Table│        │
+│  └──────────────┘  └──────────────┘  └──────────────┘        │
+└──────────────────────────┬──────────────────────────────────────┘
+                          │ HTTP/REST (Port 3000 → 8080)
+                          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    SPRING BOOT BACKEND                          │
+│                      (Java 17 + Maven)                          │
+│                                                                 │
+│  ┌────────────────────────────────────────────────────────┐   │
+│  │             QueryController (REST API)                  │   │
+│  │  • /api/health                                         │   │
+│  │  • /api/schema                                         │   │
+│  │  • /api/generate-sql                                   │   │
+│  │  • /api/query                                          │   │
+│  │  • /api/execute-sql                                    │   │
+│  └─────────────┬────────────────────────┬─────────────────┘   │
+│                │                        │                      │
+│                ▼                        ▼                      │
+│  ┌─────────────────────┐  ┌──────────────────────────┐       │
+│  │  GeminiService      │  │  DatabaseService         │       │
+│  │  • Generate SQL     │  │  • Get Schema            │       │
+│  │  • AI Integration   │  │  • Execute Queries       │       │
+│  └──────────┬──────────┘  └──────────┬───────────────┘       │
+└─────────────┼──────────────────────────┼──────────────────────┘
+              │                          │
+              ▼                          ▼
+   ┌──────────────────────┐   ┌──────────────────────┐
+   │  Google Gemini API   │   │   MySQL Database     │
+   │  (AI Model)          │   │   (text_to_sql)      │
+   │  • 2.0 Flash         │   │   • Tables & Data    │
+   └──────────────────────┘   └──────────────────────┘
+```
+
+### Technology Stack
+
 - **Frontend**: Next.js 14 with React and TypeScript
-- **Database**: MySQL
+- **Backend**: Java Spring Boot REST API
+- **Database**: MySQL 8.x
 - **AI**: Google Gemini 2.0 Flash
+- **Communication**: REST API with JSON
+- **Styling**: Tailwind CSS
+
+### Component Responsibilities
+
+#### Frontend (Next.js)
+- User interface and chat experience
+- API communication with backend
+- Data visualization (tables, schema)
+- State management and loading states
+
+#### Backend (Spring Boot)
+- REST API endpoints
+- Request validation and routing
+- Business logic orchestration
+- CORS configuration
+
+#### GeminiService
+- Natural language processing
+- SQL query generation using AI
+- Prompt engineering and context management
+- API integration with Google Gemini
+
+#### DatabaseService
+- Database connection management
+- Schema introspection
+- SQL query execution
+- Result set processing
+
+## 🔄 Application Flow
+
+### 1. User Query Flow (End-to-End)
+
+```
+User Types Question
+       │
+       ▼
+┌──────────────────────────────────────────────────────────┐
+│ FRONTEND: Chat Interface                                 │
+│ • User enters: "Show all employees with salary > 70000"  │
+│ • Click Send Button                                      │
+└──────────┬───────────────────────────────────────────────┘
+           │
+           │ POST /api/query
+           │ { "question": "Show all employees..." }
+           ▼
+┌──────────────────────────────────────────────────────────┐
+│ BACKEND: QueryController.processQuery()                  │
+│ • Receives QueryRequest                                  │
+│ • Validates input                                        │
+└──────────┬───────────────────────────────────────────────┘
+           │
+           ├─────────────────┬────────────────────────┐
+           ▼                 ▼                        ▼
+┌────────────────┐  ┌─────────────────┐   ┌──────────────────┐
+│ Step 1:        │  │ Step 2:         │   │ Step 3:          │
+│ Get Schema     │  │ Generate SQL    │   │ Execute Query    │
+└────────────────┘  └─────────────────┘   └──────────────────┘
+```
+
+### 2. Detailed Flow Steps
+
+#### Step 1: Schema Retrieval
+```
+DatabaseService.getDatabaseSchema()
+    │
+    ├─→ Query INFORMATION_SCHEMA
+    │   (Get tables, columns, data types)
+    │
+    ├─→ Build schema map
+    │   { "employees": { "id": "INT", "name": "VARCHAR", ... } }
+    │
+    └─→ Return schema structure
+```
+
+#### Step 2: SQL Generation (AI)
+```
+GeminiService.generateSQL(question, schema)
+    │
+    ├─→ Construct AI prompt with:
+    │   • Database schema context
+    │   • User question
+    │   • Instructions for SQL generation
+    │
+    ├─→ Call Gemini API
+    │   POST https://generativelanguage.googleapis.com/...
+    │
+    ├─→ Parse AI response
+    │   Extract SQL from response
+    │
+    └─→ Return SQL query
+        "SELECT * FROM employees WHERE salary > 70000"
+```
+
+#### Step 3: Query Execution
+```
+DatabaseService.executeQuery(sql)
+    │
+    ├─→ Create JDBC connection
+    │
+    ├─→ Execute SQL statement
+    │
+    ├─→ Process ResultSet
+    │   Convert rows to List<Map<String, Object>>
+    │
+    └─→ Return results
+        [
+          {"id": 1, "name": "John", "salary": 75000},
+          {"id": 3, "name": "Bob", "salary": 80000}
+        ]
+```
+
+#### Step 4: Response Assembly
+```
+QueryController
+    │
+    ├─→ Create QueryResponse
+    │   • SQL query
+    │   • Execution results
+    │   • Row count
+    │   • Success status
+    │
+    └─→ Return JSON response to frontend
+```
+
+#### Step 5: Frontend Display
+```
+Frontend receives response
+    │
+    ├─→ Display generated SQL query
+    │
+    ├─→ Render results in table
+    │   • Dynamic columns based on data
+    │   • Formatted values
+    │
+    └─→ Show query metadata
+        (row count, execution status)
+```
+
+### 3. Schema Viewing Flow
+
+```
+User clicks "Show Database Schema"
+           │
+           ▼
+GET /api/schema
+           │
+           ▼
+DatabaseService.getDatabaseSchema()
+           │
+           ├─→ Query all tables
+           ├─→ Query all columns
+           └─→ Build schema structure
+           │
+           ▼
+Frontend displays schema in expandable view
+```
+
+### 4. Error Handling Flow
+
+```
+Error occurs at any step
+    │
+    ├─→ Caught by try-catch blocks
+    │
+    ├─→ Logged to console/logs
+    │
+    ├─→ Formatted error response
+    │   { "error": "...", "message": "..." }
+    │
+    └─→ Displayed to user with context
+```
+
+### 5. Data Flow Diagram
+
+```
+┌──────────┐      Question       ┌──────────┐      Schema       ┌──────────┐
+│          │ ──────────────────> │          │ ───────────────> │          │
+│ Frontend │                     │ Backend  │                  │ Database │
+│          │ <────────────────── │          │ <─────────────── │          │
+└──────────┘    SQL + Results    └──────────┘    Schema Data   └──────────┘
+                                       │
+                                       │ Question + Schema
+                                       ▼
+                                 ┌──────────┐
+                                 │ Gemini   │
+                                 │ AI       │
+                                 └──────────┘
+                                       │
+                                       │ Generated SQL
+                                       ▼
+                                  (Returns to Backend)
+```
+
+### 6. Request/Response Cycle
+
+**Request Flow:**
+```
+User Input → Frontend Validation → HTTP POST → Backend Controller 
+→ Service Layer → External Services (AI/DB) → Response Assembly
+```
+
+**Response Flow:**
+```
+Service Results → Controller → JSON Serialization → HTTP Response 
+→ Frontend Parsing → State Update → UI Rendering
+```
+
+### Key Features of the Architecture
+
+1. **Separation of Concerns**: Clear division between frontend, backend, AI, and database layers
+2. **RESTful Design**: Standard HTTP methods and JSON communication
+3. **Error Handling**: Comprehensive error management at each layer
+4. **Scalability**: Modular design allows easy addition of new features
+5. **Security**: CORS configuration, parameterized queries, API key management
+6. **Maintainability**: Clean code structure with service layer pattern
 
 ## 📁 Project Structure
 
