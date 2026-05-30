@@ -260,6 +260,189 @@ Service Results → Controller → JSON Serialization → HTTP Response
 → Frontend Parsing → State Update → UI Rendering
 ```
 
+## 📊 Sequence Diagrams
+
+### Complete Query Processing Sequence
+
+```
+┌─────────┐         ┌──────────┐         ┌─────────────────┐         ┌──────────────┐         ┌──────────┐         ┌──────────┐
+│  User   │         │ Frontend │         │ QueryController │         │ GeminiService│         │ Database │         │ Gemini   │
+│ Browser │         │ (Next.js)│         │   (Backend)     │         │              │         │ Service  │         │   API    │
+└────┬────┘         └────┬─────┘         └────────┬────────┘         └──────┬───────┘         └────┬─────┘         └────┬─────┘
+     │                   │                         │                         │                      │                    │
+     │ 1. Enter Query    │                         │                         │                      │                    │
+     │ "Show employees"  │                         │                         │                      │                    │
+     ├──────────────────>│                         │                         │                      │                    │
+     │                   │                         │                         │                      │                    │
+     │                   │ 2. POST /api/query      │                         │                      │                    │
+     │                   │ {question: "..."}       │                         │                      │                    │
+     │                   ├────────────────────────>│                         │                      │                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │ 3. getDatabaseSchema()  │                      │                    │
+     │                   │                         ├─────────────────────────┼─────────────────────>│                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │                         │ 4. Query INFORMATION_SCHEMA               │
+     │                   │                         │                         │      Get tables/columns                   │
+     │                   │                         │                         │<─────────────────────┤                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │ 5. Schema Map           │                      │                    │
+     │                   │                         │<────────────────────────┼──────────────────────┤                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │ 6. generateSQL(question, schema)                │                    │
+     │                   │                         ├─────────────────────────>│                      │                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │                         │ 7. Build AI prompt   │                    │
+     │                   │                         │                         │ with schema context  │                    │
+     │                   │                         │                         ├──────────────────────┤                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │                         │ 8. POST generateContent                   │
+     │                   │                         │                         │    with prompt       │                    │
+     │                   │                         │                         ├───────────────────────────────────────────>│
+     │                   │                         │                         │                      │                    │
+     │                   │                         │                         │                      │ 9. AI processes    │
+     │                   │                         │                         │                      │    prompt          │
+     │                   │                         │                         │                      │<───────────────────┤
+     │                   │                         │                         │                      │                    │
+     │                   │                         │                         │ 10. SQL query        │                    │
+     │                   │                         │                         │<───────────────────────────────────────────┤
+     │                   │                         │                         │                      │                    │
+     │                   │                         │ 11. Extract & parse SQL │                      │                    │
+     │                   │                         │<────────────────────────┤                      │                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │ 12. executeQuery(sql)   │                      │                    │
+     │                   │                         ├─────────────────────────┼─────────────────────>│                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │                         │ 13. Execute SQL      │                    │
+     │                   │                         │                         │     statement        │                    │
+     │                   │                         │                         │<─────────────────────┤                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │ 14. Process ResultSet   │                      │                    │
+     │                   │                         │     Convert to List     │                      │                    │
+     │                   │                         │<────────────────────────┼──────────────────────┤                    │
+     │                   │                         │                         │                      │                    │
+     │                   │                         │ 15. Build QueryResponse │                      │                    │
+     │                   │                         │     {sql, results}      │                      │                    │
+     │                   │                         ├─────────────────────────┤                      │                    │
+     │                   │                         │                         │                      │                    │
+     │                   │ 16. HTTP 200 OK         │                         │                      │                    │
+     │                   │     JSON Response       │                         │                      │                    │
+     │                   │<────────────────────────┤                         │                      │                    │
+     │                   │                         │                         │                      │                    │
+     │                   │ 17. Parse response      │                         │                      │                    │
+     │                   │     Update state        │                         │                      │                    │
+     │                   ├──────────────────────┐  │                         │                      │                    │
+     │                   │                      │  │                         │                      │                    │
+     │                   │<─────────────────────┘  │                         │                      │                    │
+     │                   │                         │                         │                      │                    │
+     │ 18. Display:      │                         │                         │                      │                    │
+     │  • SQL Query      │                         │                         │                      │                    │
+     │  • Results Table  │                         │                         │                      │                    │
+     │<──────────────────┤                         │                         │                      │                    │
+     │                   │                         │                         │                      │                    │
+```
+
+### Schema Retrieval Sequence
+
+```
+┌─────────┐         ┌──────────┐         ┌─────────────────┐         ┌──────────────┐
+│  User   │         │ Frontend │         │ QueryController │         │  Database    │
+│ Browser │         │          │         │                 │         │  Service     │
+└────┬────┘         └────┬─────┘         └────────┬────────┘         └──────┬───────┘
+     │                   │                         │                         │
+     │ 1. Click "Show    │                         │                         │
+     │    Schema"        │                         │                         │
+     ├──────────────────>│                         │                         │
+     │                   │                         │                         │
+     │                   │ 2. GET /api/schema      │                         │
+     │                   ├────────────────────────>│                         │
+     │                   │                         │                         │
+     │                   │                         │ 3. getDatabaseSchema()  │
+     │                   │                         ├────────────────────────>│
+     │                   │                         │                         │
+     │                   │                         │                         │ 4. Query tables
+     │                   │                         │                         │ from INFORMATION_
+     │                   │                         │                         │ SCHEMA.TABLES
+     │                   │                         │                         ├──────────────┐
+     │                   │                         │                         │              │
+     │                   │                         │                         │<─────────────┘
+     │                   │                         │                         │
+     │                   │                         │                         │ 5. For each table,
+     │                   │                         │                         │ query columns from
+     │                   │                         │                         │ INFORMATION_SCHEMA
+     │                   │                         │                         │ .COLUMNS
+     │                   │                         │                         ├──────────────┐
+     │                   │                         │                         │              │
+     │                   │                         │                         │<─────────────┘
+     │                   │                         │                         │
+     │                   │                         │ 6. Schema structure     │
+     │                   │                         │    Map<Table, Columns>  │
+     │                   │                         │<────────────────────────┤
+     │                   │                         │                         │
+     │                   │ 7. JSON Response        │                         │
+     │                   │    {tables: [...]}      │                         │
+     │                   │<────────────────────────┤                         │
+     │                   │                         │                         │
+     │                   │ 8. Render schema tree   │                         │
+     │                   ├──────────────────┐      │                         │
+     │                   │                  │      │                         │
+     │                   │<─────────────────┘      │                         │
+     │                   │                         │                         │
+     │ 9. Display schema │                         │                         │
+     │    in expandable  │                         │                         │
+     │    view           │                         │                         │
+     │<──────────────────┤                         │                         │
+     │                   │                         │                         │
+```
+
+### Error Handling Sequence
+
+```
+┌─────────┐         ┌──────────┐         ┌─────────────────┐         ┌──────────────┐
+│  User   │         │ Frontend │         │ QueryController │         │   Service    │
+│ Browser │         │          │         │                 │         │   Layer      │
+└────┬────┘         └────┬─────┘         └────────┬────────┘         └──────┬───────┘
+     │                   │                         │                         │
+     │ 1. Invalid Query  │                         │                         │
+     ├──────────────────>│                         │                         │
+     │                   │                         │                         │
+     │                   │ 2. POST /api/query      │                         │
+     │                   ├────────────────────────>│                         │
+     │                   │                         │                         │
+     │                   │                         │ 3. Call service method  │
+     │                   │                         ├────────────────────────>│
+     │                   │                         │                         │
+     │                   │                         │                         │ 4. Exception occurs
+     │                   │                         │                         │ (DB error, API error,
+     │                   │                         │                         │  invalid SQL, etc.)
+     │                   │                         │                         ├──────────┐
+     │                   │                         │                         │          │
+     │                   │                         │                         │<─────────┘
+     │                   │                         │                         │
+     │                   │                         │ 5. Throw Exception      │
+     │                   │                         │<────────────────────────┤
+     │                   │                         │                         │
+     │                   │                         │ 6. Catch & Log          │
+     │                   │                         │    Create error response│
+     │                   │                         ├──────────────┐          │
+     │                   │                         │              │          │
+     │                   │                         │<─────────────┘          │
+     │                   │                         │                         │
+     │                   │ 7. HTTP 500/400         │                         │
+     │                   │    {error: "message"}   │                         │
+     │                   │<────────────────────────┤                         │
+     │                   │                         │                         │
+     │                   │ 8. Display error        │                         │
+     │                   │    notification         │                         │
+     │                   ├──────────────┐          │                         │
+     │                   │              │          │                         │
+     │                   │<─────────────┘          │                         │
+     │                   │                         │                         │
+     │ 9. Show error     │                         │                         │
+     │    message to user│                         │                         │
+     │<──────────────────┤                         │                         │
+     │                   │                         │                         │
+```
+
 ### Key Features of the Architecture
 
 1. **Separation of Concerns**: Clear division between frontend, backend, AI, and database layers
