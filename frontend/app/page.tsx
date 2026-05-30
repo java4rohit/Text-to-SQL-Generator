@@ -19,10 +19,15 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [schema, setSchema] = useState<string>('');
   const [sqlQuery, setSqlQuery] = useState<string>('');
+  const [editableSql, setEditableSql] = useState<string>('');
   const [results, setResults] = useState<any[]>([]);
   const [error, setError] = useState<string>('');
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [executionTime, setExecutionTime] = useState<number>(0);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(25); // percentage
+  const [centerPanelWidth, setCenterPanelWidth] = useState(33); // percentage
+  const [sqlOutputHeight, setSqlOutputHeight] = useState(40); // percentage
 
   const API_BASE_URL = 'http://localhost:8080/api';
 
@@ -96,6 +101,7 @@ export default function Home() {
       });
 
       setSqlQuery(response.data.sqlQuery);
+      setEditableSql(response.data.sqlQuery);
       setResults(response.data.results || []);
       
       const endTime = performance.now();
@@ -106,6 +112,35 @@ export default function Home() {
       setError(error.response?.data?.error || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Execute custom SQL query
+  const handleExecuteSql = async () => {
+    if (!editableSql.trim() || isExecuting) return;
+
+    setIsExecuting(true);
+    setError('');
+    setResults([]);
+    
+    const startTime = performance.now();
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/execute-sql`, {
+        sqlQuery: editableSql
+      });
+
+      setResults(response.data.results || []);
+      setSqlQuery(editableSql);
+      
+      const endTime = performance.now();
+      setExecutionTime(Math.round(endTime - startTime));
+
+    } catch (error: any) {
+      console.error('Error:', error);
+      setError(error.response?.data?.error || 'An error occurred while executing the query.');
+    } finally {
+      setIsExecuting(false);
     }
   };
 
@@ -168,9 +203,9 @@ export default function Home() {
             </div>
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center text-sm font-semibold">
-                A
+                J
               </div>
-              <span className="text-sm text-gray-700">Alex R.</span>
+              <span className="text-sm text-gray-700">Java4rohit</span>
             </div>
           </div>
         </div>
@@ -178,10 +213,10 @@ export default function Home() {
 
       {/* Main Dashboard */}
       <div className="max-w-[2000px] mx-auto px-6 py-6">
-        <div className="grid grid-cols-12 gap-5 h-[calc(100vh-100px)]">
+        <div className="flex gap-5 h-[calc(100vh-100px)]">
           
           {/* Left Panel - Schema Tree */}
-          <div className="col-span-3 flex flex-col">
+          <div className="flex flex-col" style={{ width: `${leftPanelWidth}%` }}>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 h-full overflow-hidden flex flex-col">
               <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Data Schemas</h2>
@@ -262,20 +297,54 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Resize Handle - Left */}
+          <div 
+            className="w-1 bg-transparent hover:bg-orange-500 cursor-col-resize transition-all duration-200 flex-shrink-0 rounded-full relative group"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startLeftWidth = leftPanelWidth;
+              const startCenterWidth = centerPanelWidth;
+
+              const handleMouseMove = (e: MouseEvent) => {
+                const deltaX = e.clientX - startX;
+                const containerWidth = window.innerWidth - 48; // minus padding
+                const deltaPercent = (deltaX / containerWidth) * 100;
+                
+                const newLeftWidth = Math.max(15, Math.min(40, startLeftWidth + deltaPercent));
+                const newCenterWidth = Math.max(20, Math.min(50, startCenterWidth - deltaPercent));
+                
+                setLeftPanelWidth(newLeftWidth);
+                setCenterPanelWidth(newCenterWidth);
+              };
+
+              const handleMouseUp = () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+              };
+
+              document.body.style.cursor = 'col-resize';
+              document.body.style.userSelect = 'none';
+              document.addEventListener('mousemove', handleMouseMove);
+              document.addEventListener('mouseup', handleMouseUp);
+            }}
+          />
+
           {/* Center Panel - Input & Prompt */}
-          <div className="col-span-4 flex flex-col space-y-4">
+          <div className="flex flex-col" style={{ width: `${centerPanelWidth}%` }}>
             {/* Input Area */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-full flex flex-col">
               <div className="px-5 py-4 border-b border-gray-200">
                 <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Natural Language Input</h2>
               </div>
-              <form onSubmit={handleSubmit} className="p-5">
+              <form onSubmit={handleSubmit} className="p-5 flex-1 flex flex-col">
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Find total revenue and orders for 'Processing' status in 2023, by month."
-                  className="w-full bg-orange-50/50 border border-orange-200 rounded-lg px-4 py-3 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none text-sm leading-relaxed"
-                  rows={5}
+                  className="w-full flex-1 bg-orange-50/50 border border-orange-200 rounded-lg px-4 py-3 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none text-sm leading-relaxed"
                   disabled={loading}
                 />
                 <button
@@ -296,60 +365,45 @@ export default function Home() {
                 </div>
               )}
             </div>
-
-            {/* Data Items Info */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-200">
-                <h2 className="text-sm font-semibold text-gray-700">Data items</h2>
-              </div>
-              <div className="overflow-auto h-full scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-                <table className="w-full text-sm">
-                  <thead className="bg-orange-50 sticky top-0">
-                    <tr className="border-b border-orange-200">
-                      <th className="px-5 py-3 text-left font-semibold text-gray-700">Name</th>
-                      <th className="px-5 py-3 text-left font-semibold text-gray-700">Data Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {schema ? (
-                      parseSchema(schema).flatMap(table => 
-                        table.fields.map((field, idx) => (
-                          <tr key={`${table.name}-${idx}`} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="px-5 py-3 text-gray-800 flex items-center space-x-2">
-                              {field.name === 'ID' || field.name === 'Customer_ID' ? (
-                                <svg className="w-3.5 h-3.5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd"/>
-                                </svg>
-                              ) : null}
-                              <span>{field.name}</span>
-                            </td>
-                            <td className="px-5 py-3">
-                              <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs font-semibold rounded">
-                                {field.type}
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      )
-                    ) : (
-                      <tr>
-                        <td colSpan={2} className="px-5 py-10 text-center text-gray-400">
-                          No schema data available
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
 
+          {/* Resize Handle - Right */}
+          <div 
+            className="w-1 bg-transparent hover:bg-orange-500 cursor-col-resize transition-all duration-200 flex-shrink-0 rounded-full relative group"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startCenterWidth = centerPanelWidth;
+
+              const handleMouseMove = (e: MouseEvent) => {
+                const deltaX = e.clientX - startX;
+                const containerWidth = window.innerWidth - 48; // minus padding
+                const deltaPercent = (deltaX / containerWidth) * 100;
+                
+                const newCenterWidth = Math.max(20, Math.min(50, startCenterWidth + deltaPercent));
+                setCenterPanelWidth(newCenterWidth);
+              };
+
+              const handleMouseUp = () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+              };
+
+              document.body.style.cursor = 'col-resize';
+              document.body.style.userSelect = 'none';
+              document.addEventListener('mousemove', handleMouseMove);
+              document.addEventListener('mouseup', handleMouseUp);
+            }}
+          />
+
           {/* Right Panel - SQL & Results */}
-          <div className="col-span-5 flex flex-col space-y-4">
-            {/* SQL Output */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="flex flex-col min-h-0 flex-1">
+            {/* SQL  */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex-shrink-0 flex flex-col" style={{ height: `${sqlOutputHeight}%` }}>
               <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">SQL Output</h2>
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">SQL Query</h2>
                 <div className="flex items-center space-x-2">
                   <button className="p-1.5 hover:bg-gray-100 rounded-md transition-colors">
                     <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
@@ -364,34 +418,31 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              <div className="bg-orange-50/30 p-5 min-h-[240px] font-mono text-sm">
+              <div className="bg-orange-50/30 p-5 h-full overflow-auto">
                 {sqlQuery ? (
-                  <div className="space-y-1">
-                    {sqlQuery.split(/\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|AND|OR|COUNT|SUM|AS)\b/gi).map((part, idx) => {
-                      const keywords = ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'AND', 'OR', 'AS'];
-                      const functions = ['COUNT', 'SUM', 'DATE_FORMAT', 'YEAR'];
-                      
-                      if (keywords.includes(part.toUpperCase())) {
-                        return <span key={idx} className="text-orange-700 font-semibold">{part}</span>;
-                      } else if (functions.includes(part.toUpperCase())) {
-                        return <span key={idx} className="text-blue-600 font-semibold">{part}</span>;
-                      }
-                      return <span key={idx} className="text-gray-800">{part}</span>;
-                    })}
-                  </div>
+                  <textarea
+                    value={editableSql}
+                    onChange={(e) => setEditableSql(e.target.value)}
+                    className="w-full h-full bg-transparent border-none outline-none font-mono text-sm text-gray-800 resize-none"
+                    placeholder="SQL query will appear here..."
+                  />
                 ) : (
-                  <div className="text-gray-400 text-sm flex items-center justify-center h-[200px]">
+                  <div className="text-gray-400 text-sm flex items-center justify-center h-full">
                     SQL query will appear here...
                   </div>
                 )}
               </div>
               {sqlQuery && (
                 <div className="px-5 py-3 border-t border-gray-200 flex items-center space-x-3">
-                  <button className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium flex items-center space-x-2 transition-colors shadow-sm">
+                  <button 
+                    onClick={handleExecuteSql}
+                    disabled={isExecuting || !editableSql.trim()}
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium flex items-center space-x-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"/>
                     </svg>
-                    <span>Run Query</span>
+                    <span>{isExecuting ? 'Executing...' : 'Run Query'}</span>
                   </button>
                   <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium flex items-center space-x-2 transition-colors">
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -403,8 +454,39 @@ export default function Home() {
               )}
             </div>
 
+            {/* Resize Handle - Vertical */}
+            <div 
+              className="h-1 bg-transparent hover:bg-orange-500 cursor-row-resize transition-all duration-200 flex-shrink-0 rounded-full my-4"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const startY = e.clientY;
+                const startSqlHeight = sqlOutputHeight;
+
+                const handleMouseMove = (e: MouseEvent) => {
+                  const deltaY = e.clientY - startY;
+                  const containerHeight = window.innerHeight - 150; // approximate container height
+                  const deltaPercent = (deltaY / containerHeight) * 100;
+                  
+                  const newSqlHeight = Math.max(25, Math.min(65, startSqlHeight + deltaPercent));
+                  setSqlOutputHeight(newSqlHeight);
+                };
+
+                const handleMouseUp = () => {
+                  document.removeEventListener('mousemove', handleMouseMove);
+                  document.removeEventListener('mouseup', handleMouseUp);
+                  document.body.style.cursor = '';
+                  document.body.style.userSelect = '';
+                };
+
+                document.body.style.cursor = 'row-resize';
+                document.body.style.userSelect = 'none';
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+              }}
+            />
+
             {/* Results Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col min-h-0">
               <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Query Results</h2>
                 {results.length > 0 && (
